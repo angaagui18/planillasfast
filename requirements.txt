@@ -5,3 +5,4 @@ openpyxl
 python-docx
 fuzzywuzzy
 unidecode
+PyPDF2
