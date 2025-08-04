@@ -1,73 +1,83 @@
 import streamlit as st
 import pandas as pd
-import pdfplumber
-import zipfile
-import os
-import tempfile
+from PyPDF2 import PdfReader
 from docx import Document
-from fuzzywuzzy import fuzz
-import datetime
-import unidecode
+from io import BytesIO
 
-# ------------------ FUNCIONES ------------------ #
+st.set_page_config(page_title="Contratos y Planillas", layout="centered")
 
-def leer_contrato(archivo_pdf):
-    texto_total = ""
-    with pdfplumber.open(archivo_pdf) as pdf:
-        for pagina in pdf.pages:
-            texto_total += pagina.extract_text() + "\n"
-    return texto_total
+st.title("📄 Contratos y Planillas")
+st.info(
+    "Sube un contrato (PDF) y una planilla (Excel). El sistema generará un informe Word con los hallazgos."
+)
 
-def leer_planillas(zip_file):
-    planillas = []
-    with zipfile.ZipFile(zip_file, 'r') as z:
-        for nombre_archivo in z.namelist():
-            if nombre_archivo.endswith('.xlsx'):
-                with z.open(nombre_archivo) as file:
-                    df = pd.read_excel(file)
-                    df["nombre_archivo"] = nombre_archivo
-                    planillas.append(df)
-    return planillas
+# Subida del contrato
+contrato_pdf = st.file_uploader("📑 Sube el contrato (PDF)", type=["pdf"])
 
-def generar_informe_word(texto_contrato, planillas, nombre_output):
-    doc = Document()
-    doc.add_heading("Informe de revisión de planillas", level=1)
+# Subida de la planilla Excel
+planilla_excel = st.file_uploader("📊 Sube la planilla (.xlsx)", type=["xlsx"])
 
-    for i, df in enumerate(planillas):
-        doc.add_heading(f"Planilla: {df['nombre_archivo'][0]}", level=2)
-        doc.add_paragraph(f"Filas: {len(df)} columnas: {len(df.columns)}")
-        
-        # Aquí va tu lógica personalizada de verificación
-        columnas_contrato = [col.lower() for col in texto_contrato.split()]
-        columnas_planilla = [col.lower() for col in df.columns]
+# Función para analizar PDF (contrato)
+def extraer_texto_contrato(file):
+    try:
+        reader = PdfReader(file)
+        texto = ""
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                texto += page_text
+        return texto.strip()
+    except Exception as e:
+        st.error(f"❌ Error al leer el contrato PDF: {e}")
+        return ""
 
-        for columna in columnas_planilla:
-            coincidencia = max([fuzz.ratio(columna, ref) for ref in columnas_contrato])
-            if coincidencia < 50:
-                doc.add_paragraph(f"⚠️ Posible inconsistencia: '{columna}' no se encuentra en el contrato.", style='List Bullet')
+# Función para generar informe Word
+def generar_informe(texto_contrato, planilla_df):
+    try:
+        doc = Document()
+        doc.add_heading("Informe de Revisión de Planillas", 0)
 
-    doc.save(nombre_output)
+        doc.add_heading("Contrato", level=1)
+        doc.add_paragraph(
+            texto_contrato[:1500] + "..." if texto_contrato else "No se pudo extraer texto del contrato."
+        )
 
-# ------------------ INTERFAZ ------------------ #
+        doc.add_heading("Resumen de la Planilla", level=1)
+        doc.add_paragraph(f"Filas totales en la planilla: {len(planilla_df)}")
 
-st.set_page_config(page_title="PlanillasFast", layout="centered")
-st.title("📑 PlanillasFast - Revisión de contratos y planillas")
+        columnas_planilla = [str(col).lower() for col in planilla_df.columns]
+        doc.add_paragraph("Columnas encontradas en la planilla:")
+        doc.add_paragraph(", ".join(columnas_planilla))
 
-st.info("Sube un contrato (PDF) y un ZIP con las planillas (Excel). El sistema generará un informe Word con los hallazgos.")
+        doc.add_heading("Primeras 5 filas", level=2)
+        doc.add_paragraph(planilla_df.head().to_string())
 
-contrato = st.file_uploader("📄 Sube el contrato (PDF)", type=["pdf"])
-zip_planillas = st.file_uploader("📁 Sube las planillas (ZIP con Excel)", type=["zip"])
+        output = BytesIO()
+        doc.save(output)
+        output.seek(0)
+        return output
+    except Exception as e:
+        st.error(f"❌ Error al generar el informe: {e}")
+        return None
 
+# Botón de generación
 if st.button("Generar informe"):
-    if contrato is not None and zip_planillas is not None:
-        with st.spinner("Procesando archivos..."):
-            texto = leer_contrato(contrato)
-            planillas = leer_planillas(zip_planillas)
+    if contrato_pdf and planilla_excel:
+        try:
+            texto_contrato = extraer_texto_contrato(contrato_pdf)
+            planilla_df = pd.read_excel(planilla_excel)
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmpfile:
-                generar_informe_word(texto, planillas, tmpfile.name)
-                st.success("✅ Informe generado con éxito.")
-                with open(tmpfile.name, "rb") as f:
-                    st.download_button("📥 Descargar informe Word", f, file_name="informe_planillas.docx")
+            informe = generar_informe(texto_contrato, planilla_df)
+
+            if informe:
+                st.success("✅ Informe generado correctamente.")
+                st.download_button(
+                    label="📥 Descargar informe Word",
+                    data=informe,
+                    file_name="informe_planillas.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+        except Exception as e:
+            st.error(f"❌ Error al procesar los archivos: {e}")
     else:
-        st.warning("⚠️ Por favor, sube ambos archivos para continuar.")
+        st.warning("⚠️ Por favor, sube tanto el contrato como la planilla.")
