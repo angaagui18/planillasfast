@@ -1,0 +1,7 @@
+streamlit
+pdfplumber
+pandas
+openpyxl
+python-docx
+fuzzywuzzy
+unidecode
