@@ -6,7 +6,7 @@ from io import BytesIO
 
 st.set_page_config(page_title="PlanillasFast", layout="centered")
 
-st.title("📄 PLanillasFast")
+st.title("📄 PlanillasFast")
 st.info(
     "Sube un contrato (PDF) y una planilla (Excel). El sistema generará un informe Word con los hallazgos."
 )
