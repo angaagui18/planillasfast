@@ -4,9 +4,9 @@ from PyPDF2 import PdfReader
 from docx import Document
 from io import BytesIO
 
-st.set_page_config(page_title="Contratos y Planillas", layout="centered")
+st.set_page_config(page_title="PlanillasFast", layout="centered")
 
-st.title("📄 Contratos y Planillas")
+st.title("📄 PLanillasFast")
 st.info(
     "Sube un contrato (PDF) y una planilla (Excel). El sistema generará un informe Word con los hallazgos."
 )
